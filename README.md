@@ -1,17 +1,14 @@
-# WASM DKG with React
+#  Cryptex Example
 
-wasm wrappers for the dkg core library, allows for use within the browser
+This repo contains code for a react project that interacts with the cryptex blockchain. So far, this is solely PoC/Experiement level work.
 
-## Build
 
-First build the dkg lib and the wasm. From the [dkg-wasm](../dkg-wasm/) directory, run:
+## Building
 
 ``` bash
-cargo build
-# build for web target
-wasm-pack build --target web
+npm i
+npm run start
 ```
 
-## Troubleshooting
-
-If you encounter an error like: `export 'default' (imported as 'init') was not found in 'dkg'`, this most likely indicates that the wasm library was builder with `--target bunder`. To fix this, rebuild the wasm using `--target web` only.
+## Local Development
+For local devlopment, update the `package.json` to point to a local wasm-pack build of the dkg-wasm library (https://github.com/ideal-lab5/dkg/tree/main/dkg-wasm).
