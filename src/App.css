@@ -1,0 +1,20 @@
+.App {
+  text-align: center;
+}
+
+.header {
+  display: grid;
+}
+
+.body {
+  /* display: inline-grid; */
+}
+
+.section {
+  display: inline-grid;
+  border: solid 1px black;
+}
+
+.form {
+  display: contents;
+}
