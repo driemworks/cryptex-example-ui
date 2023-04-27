@@ -16,7 +16,6 @@ function App() {
 
   const [api, setApi] = useState(null);
   const [acct, setAcct] = useState(null);
-  const [societyId, setSocietyId] = useState('');
   const [invitations, setInvitiations] = useState([]);
   const [committed, setCommitted] = useState([]);
   const [activeMemberships, setActiveMemberships] = useState([]);
@@ -25,7 +24,7 @@ function App() {
     const host = "127.0.0.1";
     const port = "9944";
     let provider = new WsProvider(`ws://${host}:${port}`);
-    const f = async () => {
+    const setup = async () => {
       const api = await ApiPromise.create({
         provider,
         types: {
@@ -38,13 +37,11 @@ function App() {
       const keyring = new Keyring({ type: 'sr25519' });
       let aliceAcct = keyring.addFromUri("//Alice");
       setAcct(aliceAcct);
-      // updateMembershipMaps(api, aliceAcct);
     }
-    f();
+    setup();
   }, []);
 
   useEffect(() => {
-    // console.log('hey');
     if (api !== null) {
       updateMembershipMaps(api, acct);
     }
@@ -81,7 +78,6 @@ function App() {
       let society = await handleQuerySociety(api, id);
       let statusArray = await handleQuerySocietyStatus(api, id);
       let latest = statusArray[statusArray.length - 1][1].toHuman();
-      console.log(latest);
       setCommitted([...invitations, {
         id: id,
         society: society,
@@ -114,37 +110,40 @@ function App() {
     return status;
   }
 
-  const handleSubmitSignature = async(seed, id, r) => {
-    // sign message
-    let poly = JSON.parse(localStorage.getItem(id));
-    let sk = calculate_secret(poly.coeffs);
-    let message = "test";
-    let encodedMessage = new TextEncoder().encode(message);
-    let signature = sign(BigInt(seed), encodedMessage, sk, BigInt(r));
-    console.log(signature);
-    // submit to chain
-    api.tx.society.submitSignature(
-      id, signature.prover_response, signature.verifier_challenge,
-    ).signAndSend(acct, result => {
-      if (result.isInBlock) {
-        console.log('it worked');
-      } 
-      if (result.isFinalized) {
-        console.log('nice');
-      }
-    });
-  }
+  // const handleSubmitSignature = async(seed, id, r) => {
+  //   // sign message
+  //   let poly = JSON.parse(localStorage.getItem(id));
+  //   let sk = calculate_secret(poly.coeffs);
+  //   let message = "test";
+  //   let encodedMessage = new TextEncoder().encode(message);
+  //   let signature = sign(BigInt(seed), encodedMessage, sk, BigInt(r));
+  //   console.log(signature);
+  //   // submit to chain
+  //   api.tx.society.submitSignature(
+  //     id, signature.prover_response, signature.verifier_challenge,
+  //   ).signAndSend(acct, result => {
+  //     if (result.isInBlock) {
+  //       console.log('it worked');
+  //     } 
+  //     if (result.isFinalized) {
+  //       console.log('nice');
+  //     }
+  //   });
+  // }
 
   const Memberships = () => {
 
     const [isLoading, setIsLoading] = useState(false);
     const [displayText, setDisplayText] = useState(['']);
+    // a message to encrypt and publish (using gpk)
+    const [message, setMessage] = useState('');
 
     const handleKeygen = (id, threshold, size, r) => {
       setIsLoading(true);
       setDisplayText([...displayText, 'Generating secrets']);
       let poly = keygen(BigInt(r), threshold);
-      localStorage.setItem(id, JSON.stringify(poly));
+      let localId = id + ':' + acct.address;
+      localStorage.setItem(localId, JSON.stringify(poly));
       setDisplayText([...displayText, 'Calculating shares and commitments']);
       let sharesAndCommitments = calculate_shares_and_commitments(
         threshold, size, BigInt(r), poly.coeffs,
@@ -167,8 +166,9 @@ function App() {
       setIsLoading(true);
       setDisplayText([...displayText, 'Recovering secrets']);
       // console.log(JSON.stringify(polys));
-      let poly = JSON.parse(localStorage.getItem(id));
-      console.log(JSON.stringify(poly));
+      let localId = id + ':' + acct.address;
+      let poly = JSON.parse(localStorage.getItem(localId));
+      // TODO: these vals should be encoded in the society?
       let r1 = 45432;
       let r2 = 48484;
       let secret = calculate_secret(poly.coeffs);
@@ -176,13 +176,113 @@ function App() {
       let pubkey = calculate_pubkey(BigInt(r1), BigInt(r2), secret);
       setDisplayText([...displayText, 'Submitting signed tx']);
       api.tx.society.join(
-        id, pubkey.g2,
-      ).signAndSend(acct, result => {
-        if (result.isFinalized) {
-          setDisplayText([...displayText, 'Tx finalized']);
+        id, pubkey.g1, pubkey.g2,
+      )
+      .signAndSend(acct, ({ status, events }) => {
+        if (status.isInBlock || status.isFinalized) {
           updateMembershipMaps(api, acct);
           setDisplayText('');
           setIsLoading(false);
+          events
+            // find/filter for failed events
+            .filter(({ event }) =>
+              api.events.system.ExtrinsicFailed.is(event)
+            )
+            // we know that data for system.ExtrinsicFailed is
+            // (DispatchError, DispatchInfo)
+            .forEach(({ event: { data: [error, info] } }) => {
+              if (error.isModule) {
+                // for module errors, we have the section indexed, lookup
+                const decoded = api.registry.findMetaError(error.asModule);
+                const { docs, method, section } = decoded;
+    
+                console.log(`${section}.${method}: ${docs.join(' ')}`);
+              } else {
+                // Other, CannotLookup, BadOrigin, no extra info
+                console.log(error.toString());
+              }
+            });
+        }
+      });
+      // .signAndSend(acct, result => {
+      //   if (result) {
+      //     console.log(JSON.stringify(result.toHuman()));
+      //   }
+      //   if (result.isFinalized) {
+      //     setDisplayText([...displayText, 'Tx finalized']);
+      //     updateMembershipMaps(api, acct);
+      //     setDisplayText('');
+      //     setIsLoading(false);
+      //   }
+      // });
+    }
+
+    // const handleCalculateSocietyPubkey = async (id) => {
+    //   // retrieve all published pubkeys and combine them
+    //   // these pubkeys are in G2...
+    //   let pubkeys = await api.query.society.rsvp(id);
+    //   let gpk = pubkeys.toHuman()
+    //     .reduce((a, b) => 
+    //       combine_pubkeys(a[1], b[1]));
+    //     console.log(gpk);
+    //   // TODO: maybe store in localstorage?
+    //   setGpkMap(new Map(gpkMap.set(id, gpk)));
+    // }
+
+
+  // const calculateGroupSecretKey = () => {
+  //   return society.reduce((a, b) => combine_secrets(a.secret, b.secret));
+  // }
+
+    const handlePublishMessage = async (id) => {
+      // the 'seed', random
+      let seed = 23;
+      // arbitrary
+      let r1 = 123123;
+      // how can I convert this to my  'SerializablePublicKey"?
+      let pubkeys = await api.query.society.pubkeys(id);
+      // each one is (author, pkg1, pkg2)
+      let gpk;
+      if (pubkeys.length === 1) {
+        gpk = {
+          g1: pubkeys[0][1],
+          g2: pubkeys[0][2],
+        };
+      } else {
+        gpk = pubkeys.toHuman()
+          .reduce((a, b) => 
+            combine_pubkeys(
+              { g1: a[1], g2: a[2] }, 
+              { g1: b[1], g2: b[2] })
+            );
+      }
+      // let gpk = gpkMap.get(id);
+      // let msg = new TextEncoder().encode(message);
+      let msg = message;
+      if (msg.length > 32) {
+        console.log('message too long');
+        return;
+      } else if (msg.length < 32) {
+        let max = 32 - msg.length;
+        // pad the message to 32 bytes
+        for (let i = 0; i < max; i++) {
+          msg += "0";
+        }
+      }
+      console.log(msg.length);
+      let ciphertext = encrypt(BigInt(seed), BigInt(r1), msg, gpk.g2);
+      console.log(ciphertext);
+      api.tx.society.publish(
+        id, 
+        ciphertext.v, 
+        ciphertext.u, 
+        ciphertext.w,
+      ).signAndSend(acct, result => {
+        if (result.isInBlock) {
+          console.log('all good');
+        }
+        if (result.isFinalized) {
+          console.log('the tx is finalized');
         }
       });
     }
@@ -278,9 +378,12 @@ function App() {
                 <span>
                   id: { s.id }
                 </span>
-                <button onClick={() => handleSubmitSignature(2323, s.id, 23)}>
-                  Submit signature
-                </button>
+                <div>
+                  <input id="message-input" type="text" placeholder='Write a message' value={message} onChange={e => setMessage(e.target.value)} />
+                  <button onClick={() => handlePublishMessage(s.id)}>
+                    Publish
+                  </button>
+                </div>
               </div>
           </li>);
           }) }
@@ -362,16 +465,6 @@ function App() {
       </div>
     );
   }
-
-  // const calculateGroupPublicKey = () => {
-  //   return society.reduce((a, b) => combine_pubkeys(a.pubkey, b.pubkey));
-  // }
-
-
-
-  // const calculateGroupSecretKey = () => {
-  //   return society.reduce((a, b) => combine_secrets(a.secret, b.secret));
-  // }
 
   return (
     <div className="App">
