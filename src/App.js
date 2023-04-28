@@ -11,6 +11,7 @@ import {
 import { useWasm } from './useWasm';
 import { useEffect, useState } from 'react';
 import { create, CID } from 'ipfs-http-client';
+import CreateSociety from './components/create-society/create-society.component';
 
 function App() {
   // make sure the wasm blob is loaded
@@ -19,6 +20,7 @@ function App() {
   const [ipfs, setIpfs] = useState(null);
   const [api, setApi] = useState(null);
   const [acct, setAcct] = useState(null);
+  
   const [invitations, setInvitiations] = useState([]);
   const [committed, setCommitted] = useState([]);
   const [activeMemberships, setActiveMemberships] = useState([]);
@@ -39,7 +41,6 @@ function App() {
         protocol: 'http',
     });
     let id = await ipfs.id();
-    console.log(id);
     if (id !== null) {
         setIpfs(ipfs);
     }
@@ -57,17 +58,27 @@ function App() {
       const keyring = new Keyring({ type: 'sr25519' });
       let aliceAcct = keyring.addFromUri("//Alice");
       setAcct(aliceAcct);
+      await initEventListener(api, aliceAcct);
       updateMembershipMaps(api, aliceAcct);
     }
     setup();
   }, []);
-
-  // useEffect(() => {
-  //   if (api !== null) {
-  //     updateMembershipMaps(api, acct);
-  //   }
-  // }, [api]);
-
+  
+  const initEventListener = async (api, acct) => {
+      // Subscribe to system events via storage
+    api.query.system.events((events) => {
+      // console.log(`\nReceived ${events.length} events:`);
+      // Loop through the Vec<EventRecord>
+      events.forEach((record) => {
+        // Extract the phase, event and the event types
+        const { event, phase } = record;
+        const eventMethod = event.method;
+        if (eventMethod === 'CreatedSociety') {
+          updateMembershipMaps(api, acct);
+        }
+      });
+    });
+  }
 
   const updateMembershipMaps = async (api, acct) => {
     setInvitiations([]);
@@ -90,9 +101,7 @@ function App() {
         society: society,
         status: latest,
       };
-      // if (!invitations.contains(invite)) {
-        setInvitiations([...invitations, invite]);
-      // }
+      setInvitiations([...invitations, invite]);
     }); 
   }
 
@@ -107,14 +116,13 @@ function App() {
         society: society,
         status: latest,
       };
-      // if (!committed.contains(comm)) {
-        setCommitted([...committed, comm]);
-      // }
+      setCommitted([...committed, comm]);
     }); 
   }
 
   const queryActiveMembership = async (api, acct) => {
-    let activeMembershipsResults = await api.query.society.membership(acct.address, "active");
+    let activeMembershipsResults = await api.query.society.membership(
+      acct.address, "active");
     activeMembershipsResults.forEach(async id => {
       let societyDetails = await handleQuerySociety(api, id);
       let statusArray = await handleQuerySocietyStatus(api, id);
@@ -124,9 +132,7 @@ function App() {
         society: societyDetails,
         status: latest,
       };
-      // if (activeMemberships.indexOf(active) === -1) {
-        setActiveMemberships([...activeMemberships, active]);
-      // }
+      setActiveMemberships([...activeMemberships, active]);
     });
   }
 
@@ -148,31 +154,21 @@ function App() {
 
   const handleQueryReencryptionKeys = async() => {
     let entries = await api.query.society.reencryptionKeys(acct.address);
-    // let flatHashes = hashes.map(({ args: [_, hash] }) => hexToU8a(hash.toHuman()));
-    // console.log(`hashes: ${flatHashes}`);
     entries.forEach(async entry => {
       let hash = entry.toHuman()[1];
       let rk = entry.toHuman()[2];
-      console.log(hash);
-    //   // let _h = hash.map(({ args: [_, h] }) => h);
-    //   // console.log(_h);
-    //   let rks = await api.query.society.reencryptionKeys(acct.address, hash);
-    //   console.log(rks);
       let cid = localStorage.getItem(hash.toString());
       let society_id = localStorage.getItem(cid);
       let society = await handleQuerySociety(api, society_id);
       let threshold = society.toHuman().threshold;
-      console.log('threshold ' +threshold);
-      // want to get the threshold value for the specific society as well
-      // so that it can be determined if decryptable
-      // (hash, cid, society_id, threshold, rks)
-      setSharedKeys(new Map(sharedKeys.set(hash, [...sharedKeys, {
-        cid: cid,
-        threshold: threshold,
-        society_id: society_id,
-        rk: rk,
-      }])));
-      // setSharedKeys([...sharedKeys, ]);
+      setSharedKeys(new Map(
+        sharedKeys.set(hash, [...sharedKeys, {
+          cid: cid,
+          threshold: threshold,
+          society_id: society_id,
+          rk: rk,
+        }])
+      ));
     });
   }
 
@@ -204,15 +200,19 @@ function App() {
     // a message to encrypt and publish (using gpk)
     const [message, setMessage] = useState('');
 
-    const handleKeygen = (id, threshold, size, r) => {
+    const handleKeygen = (id, threshold, size) => {
+      let r1 = 45432;
+      let r2 = 48484;
       setIsLoading(true);
       setDisplayText([...displayText, 'Generating secrets']);
-      let poly = keygen(BigInt(r), threshold);
+      // TODO: make random
+      let seed = 23;
+      let poly = keygen(BigInt(seed), threshold);
       let localId = id + ':' + acct.address;
       localStorage.setItem(localId, JSON.stringify(poly));
       setDisplayText([...displayText, 'Calculating shares and commitments']);
       let sharesAndCommitments = calculate_shares_and_commitments(
-        threshold, size, BigInt(r), poly.coeffs,
+        threshold, size, BigInt(r2), poly.coeffs,
       );
       setDisplayText([...displayText, 'Submitting signed tx']);
       api.tx.society.commit(
@@ -230,7 +230,6 @@ function App() {
     const handleJoin = (id) => {
       setIsLoading(true);
       setDisplayText([...displayText, 'Recovering secrets']);
-      // console.log(JSON.stringify(polys));
       let localId = id + ':' + acct.address;
       let poly = JSON.parse(localStorage.getItem(localId));
       // TODO: these vals should be encoded in the society?
@@ -243,29 +242,10 @@ function App() {
       api.tx.society.join(
         id, pubkey.g1, pubkey.g2,
       ).signAndSend(acct, ({ status, events }) => {
-        if (status.isInBlock || status.isFinalized) {
+        if (status.isInBlock) {
           updateMembershipMaps(api, acct);
           setDisplayText('');
           setIsLoading(false);
-          events
-            // find/filter for failed events
-            .filter(({ event }) =>
-              api.events.system.ExtrinsicFailed.is(event)
-            )
-            // we know that data for system.ExtrinsicFailed is
-            // (DispatchError, DispatchInfo)
-            .forEach(({ event: { data: [error, info] } }) => {
-              if (error.isModule) {
-                // for module errors, we have the section indexed, lookup
-                const decoded = api.registry.findMetaError(error.asModule);
-                const { docs, method, section } = decoded;
-    
-                console.log(`${section}.${method}: ${docs.join(' ')}`);
-              } else {
-                // Other, CannotLookup, BadOrigin, no extra info
-                console.log(error.toString());
-              }
-            });
         }
       });
     }
@@ -288,8 +268,7 @@ function App() {
           g2: pubkeys[0][2],
         };
       } else {
-        gpk = pubkeys.toHuman()
-          .reduce((a, b) => 
+        gpk = pubkeys.reduce((a, b) => 
             combine_pubkeys(
               { g1: a[1], g2: a[2] }, 
               { g1: b[1], g2: b[2] })
@@ -306,11 +285,8 @@ function App() {
           msg += "0";
         }
       }
-      console.log('your message as bytes');
-      console.log(new TextEncoder().encode(msg));
-      let ciphertext = encrypt(BigInt(seed), BigInt(r1), msg, gpk.g2);
-      console.log('your ciphertext as bytes');
-      console.log(ciphertext.v);
+      let msgBytes = new TextEncoder().encode(msg)
+      let ciphertext = encrypt(BigInt(seed), BigInt(r1), msgBytes, gpk.g2);
       let { cid } = await ipfs.add(ciphertext.v);
       api.tx.society.publish(
         id, 
@@ -368,9 +344,8 @@ function App() {
                   { item.status === "Commit" ?
                   <button onClick={() => handleKeygen(
                     item.id, threshold, 
-                    JSON.parse(item.society).members.length, 23
-                    )}>
-                    Commit 
+                    JSON.parse(item.society).members.length + 1, 48484
+                    )}> Commit 
                   </button>
                   : 
                   <div>
@@ -449,6 +424,8 @@ function App() {
 
   const SharedData = () => {
 
+    const [decryptedMessage, setDecryptedMessage] = useState('');
+
     const handleDecrypt = async(id, hash_, cid, sks) => {
       let r2 = 48484;
       // fetch ciphertext by CID
@@ -457,14 +434,13 @@ function App() {
       for await (const item of result) {
          ct = item;
       }
-      console.log(ct);
       // get u and w values from Fs
       let files = await api.query.society.fs(id);
       let target = files.find(f => f.hash_ == hash_);
       // calcualate secret key
       let gsk = sks.reduce((a, b) => combine_secrets(a, b));
-      let plaintext = threshold_decrypt(BigInt(r2), ct, target.u, gsk);
-      console.log('plaintext ' + plaintext);
+      let plaintext = threshold_decrypt(BigInt(r2), ct, target.u, hexToU8a(gsk));
+      setDecryptedMessage(String.fromCharCode(...plaintext));
     }
 
     return (
@@ -473,25 +449,26 @@ function App() {
         <div className='container'>
           <button onClick={handleQueryReencryptionKeys}>click me</button>
           <ul>
-            { [...sharedKeys.keys()].map((entry, i) => {
-              let k = sharedKeys.get(entry);
-              let rks = k.map(j => j.rk);
-              console.log('rks ' + JSON.stringify(rks));
+            { [...sharedKeys.keys()].map((hash, i) => {
+              let k = sharedKeys.get(hash);
+              let rks = k.map(j => j.rk).filter(k => k != undefined);
+              // console.log(hexToU8a(rks[0]));
               return (
                 <li key={i}>
                   <div className='section'>
-                    { entry }
-                    <span>Society { k[0].society_id }</span>
-                    <span>CID {k[0].cid}</span>
-                    <span>Threshold { k[0].threshold }</span>
-                    { k.length < k[0].threshold ?
+                    { hash }
+                    <span>Society { k[1].society_id }</span>
+                    <span>CID {k[1].cid}</span>
+                    <span>Threshold { k[1].threshold }</span>
+                    { k.length < k[1].threshold ?
                       <div>
                         <span>Insufficient shares for decryption `({k.length}) of ({k[0].threshold})`</span>
                       </div> :
                       <div>
-                        <button onClick={async () => handleDecrypt(k[0].society_id, entry, k[0].cid, rks)}>
+                        <button onClick={async () => handleDecrypt(k[1].society_id, hash, k[1].cid, rks)}>
                           Decrypt
                         </button>
+                        { decryptedMessage }
                       </div>
                       }
                   </div>
@@ -513,6 +490,8 @@ function App() {
       let localId = selectedSociety + ':' + acct.address;
       let poly = JSON.parse(localStorage.getItem(localId));
       let secret = calculate_secret(poly.coeffs);
+      console.log('secret');
+      console.log(secret);
       // TODO: encrypt the secret
       api.tx.society.submitReencryptionKey(
         selectedSociety, recipient, hash, secret,
@@ -552,83 +531,10 @@ function App() {
     );
   }
 
-  const CreateSociety = () => {
-    const [threshold, setThreshold] = useState(0);
-    const [deadline, setDeadline] = useState(0);
-    const [name, setName] = useState('');
-    const [id, setId] = useState('');
-    const [newMember, setNewMember] = useState('');
-    const [members, setMembers] = useState([]);
-
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleCreateSociety = () => {
-      setIsLoading(true);
-      api.tx.society.create(
-        id, threshold, name, deadline, members,
-      ).signAndSend(acct, result => {
-        if (result.isFinalized) {
-          // will emit an event in the future
-          setIsLoading(false);
-          updateMembershipMaps(api, acct);
-        }
-      });
-    }
-
-    return (
-      <div className='section'>
-        <span>
-          Create a Society
-        </span>
-        {isLoading === true ? 
-        <div>
-          <p>Loading...</p>
-        </div> :
-        <div className='form'> 
-          <label htmlFor='threshold'>threshold</label>
-          <input id="threshold" type="number" value={threshold} onChange={e => setThreshold(e.target.value)} />
-
-          <label htmlFor='id'>id</label>
-          <input id="id" type="text" value = {id} onChange={e => setId(e.target.value)} />
-
-          <label htmlFor='name'>name</label>
-          <input id="name" type="text" value = {name} onChange={e => setName(e.target.value)} />
-
-          <label htmlFor='deadline'>deadline</label>
-          <input id="deadline" type="number" value = {deadline} onChange={e => setDeadline(e.target.value)} />
-
-          <label htmlFor='new-member'>add members</label>
-          <input id="new-member" type="text" value={newMember} onChange={e => {
-            setNewMember(e.target.value);
-          }} />
-          <button onClick={() => {
-            let addMember = newMember;
-            setMembers([...members, addMember]);
-            setNewMember('');
-          }}>+</button>
-          <ul>
-          { members.map((member, i) => {
-              return (
-              <li key={i}>
-                <div>
-                  { member }
-                </div>
-              </li>
-              )
-          })}
-          </ul>
-          <button onClick={handleCreateSociety}> Create Society
-          </button>
-        </div>
-        }
-      </div>
-    );
-  }
-
   return (
     <div className="App">
       <div className='header'>
-        <h2>Cryptex</h2>
+        <h2>Enigma</h2>
         <span>
           Api is { api === null ? 'not' : '' } ready
         </span>
@@ -640,7 +546,7 @@ function App() {
           <FileSystem />
         </div>
         <div className='section'>
-          <CreateSociety />
+          <CreateSociety api={api} acct={acct} />
         </div>
         <div>
         <SharedData />
