@@ -13,8 +13,16 @@
 .section {
   display: inline-grid;
   border: solid 1px black;
+  padding: 5px;
+  margin: 10px;
 }
 
 .form {
   display: contents;
+}
+
+.fs {
+  max-height: 20vw;
+  overflow: scroll;
+  background-color: gainsboro;
 }

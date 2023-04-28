@@ -1,6 +1,7 @@
 /* global BigInt */
 import './App.css';
 import { ApiPromise, WsProvider, Keyring } from "@polkadot/api";
+import { hexToU8a } from "@polkadot/util";
 import { 
     keygen, calculate_secret, calculate_shares_and_commitments,
     calculate_pubkey, sign, verify, 
@@ -9,22 +10,41 @@ import {
 } from "dkg-wasm";
 import { useWasm } from './useWasm';
 import { useEffect, useState } from 'react';
+import { create, CID } from 'ipfs-http-client';
 
 function App() {
   // make sure the wasm blob is loaded
   useWasm();
 
+  const [ipfs, setIpfs] = useState(null);
   const [api, setApi] = useState(null);
   const [acct, setAcct] = useState(null);
   const [invitations, setInvitiations] = useState([]);
   const [committed, setCommitted] = useState([]);
   const [activeMemberships, setActiveMemberships] = useState([]);
 
+  const [selectedSociety, setSelectedSociety] = useState('');
+  const [files, setFiles] = useState([]);
+  const [sharedKeys, setSharedKeys] = useState(new Map());
+
   useEffect(() => {
     const host = "127.0.0.1";
     const port = "9944";
+    const ipfsPort = "5001";
     let provider = new WsProvider(`ws://${host}:${port}`);
     const setup = async () => {
+      const ipfs = await create({
+        host: host,
+        port: ipfsPort,
+        protocol: 'http',
+    });
+    let id = await ipfs.id();
+    console.log(id);
+    if (id !== null) {
+        setIpfs(ipfs);
+    }
+      setIpfs(ipfs)
+      // setup api for blockchain
       const api = await ApiPromise.create({
         provider,
         types: {
@@ -37,25 +57,26 @@ function App() {
       const keyring = new Keyring({ type: 'sr25519' });
       let aliceAcct = keyring.addFromUri("//Alice");
       setAcct(aliceAcct);
+      updateMembershipMaps(api, aliceAcct);
     }
     setup();
   }, []);
 
-  useEffect(() => {
-    if (api !== null) {
-      updateMembershipMaps(api, acct);
-    }
-  }, [acct]);
+  // useEffect(() => {
+  //   if (api !== null) {
+  //     updateMembershipMaps(api, acct);
+  //   }
+  // }, [api]);
 
 
-  const updateMembershipMaps = (api, acct) => {
+  const updateMembershipMaps = async (api, acct) => {
     setInvitiations([]);
     setCommitted([]);
     setActiveMemberships([]);
 
-    queryActiveMembership(api, acct);
-    queryCommitted(api, acct);
-    queryInvites(api, acct);
+    await queryActiveMembership(api, acct);
+    await queryCommitted(api, acct);
+    await queryInvites(api, acct);
   }
 
   const queryInvites = async (api, acct) => {
@@ -64,11 +85,14 @@ function App() {
       let society = await handleQuerySociety(api, id);
       let statusArray = await handleQuerySocietyStatus(api, id);
       let latest = statusArray[statusArray.length - 1][1].toHuman();
-      setInvitiations([...invitations, {
+      let invite = {
         id: id,
         society: society,
         status: latest,
-      }]);
+      };
+      // if (!invitations.contains(invite)) {
+        setInvitiations([...invitations, invite]);
+      // }
     }); 
   }
 
@@ -78,11 +102,14 @@ function App() {
       let society = await handleQuerySociety(api, id);
       let statusArray = await handleQuerySocietyStatus(api, id);
       let latest = statusArray[statusArray.length - 1][1].toHuman();
-      setCommitted([...invitations, {
+      let comm = {
         id: id,
         society: society,
         status: latest,
-      }]);
+      };
+      // if (!committed.contains(comm)) {
+        setCommitted([...committed, comm]);
+      // }
     }); 
   }
 
@@ -92,11 +119,14 @@ function App() {
       let societyDetails = await handleQuerySociety(api, id);
       let statusArray = await handleQuerySocietyStatus(api, id);
       let latest = statusArray[statusArray.length - 1][1].toHuman();
-      setActiveMemberships([...activeMemberships, {
+      let active = {
         id: id,
         society: societyDetails,
         status: latest,
-      }]);
+      };
+      // if (activeMemberships.indexOf(active) === -1) {
+        setActiveMemberships([...activeMemberships, active]);
+      // }
     });
   }
 
@@ -108,6 +138,42 @@ function App() {
   const handleQuerySocietyStatus = async(api, id) => {
     let status = await api.query.society.societyStatus(id);
     return status;
+  }
+
+  const handleQueryFs = async (id) => {
+    let fs = await api.query.society.fs(id);
+    setSelectedSociety(id);
+    setFiles(fs);
+  }
+
+  const handleQueryReencryptionKeys = async() => {
+    let entries = await api.query.society.reencryptionKeys(acct.address);
+    // let flatHashes = hashes.map(({ args: [_, hash] }) => hexToU8a(hash.toHuman()));
+    // console.log(`hashes: ${flatHashes}`);
+    entries.forEach(async entry => {
+      let hash = entry.toHuman()[1];
+      let rk = entry.toHuman()[2];
+      console.log(hash);
+    //   // let _h = hash.map(({ args: [_, h] }) => h);
+    //   // console.log(_h);
+    //   let rks = await api.query.society.reencryptionKeys(acct.address, hash);
+    //   console.log(rks);
+      let cid = localStorage.getItem(hash.toString());
+      let society_id = localStorage.getItem(cid);
+      let society = await handleQuerySociety(api, society_id);
+      let threshold = society.toHuman().threshold;
+      console.log('threshold ' +threshold);
+      // want to get the threshold value for the specific society as well
+      // so that it can be determined if decryptable
+      // (hash, cid, society_id, threshold, rks)
+      setSharedKeys(new Map(sharedKeys.set(hash, [...sharedKeys, {
+        cid: cid,
+        threshold: threshold,
+        society_id: society_id,
+        rk: rk,
+      }])));
+      // setSharedKeys([...sharedKeys, ]);
+    });
   }
 
   // const handleSubmitSignature = async(seed, id, r) => {
@@ -148,7 +214,6 @@ function App() {
       let sharesAndCommitments = calculate_shares_and_commitments(
         threshold, size, BigInt(r), poly.coeffs,
       );
-      // setDisplayText([...displayText, 'Calculated public key']);
       setDisplayText([...displayText, 'Submitting signed tx']);
       api.tx.society.commit(
         id, sharesAndCommitments,
@@ -177,8 +242,7 @@ function App() {
       setDisplayText([...displayText, 'Submitting signed tx']);
       api.tx.society.join(
         id, pubkey.g1, pubkey.g2,
-      )
-      .signAndSend(acct, ({ status, events }) => {
+      ).signAndSend(acct, ({ status, events }) => {
         if (status.isInBlock || status.isFinalized) {
           updateMembershipMaps(api, acct);
           setDisplayText('');
@@ -204,32 +268,7 @@ function App() {
             });
         }
       });
-      // .signAndSend(acct, result => {
-      //   if (result) {
-      //     console.log(JSON.stringify(result.toHuman()));
-      //   }
-      //   if (result.isFinalized) {
-      //     setDisplayText([...displayText, 'Tx finalized']);
-      //     updateMembershipMaps(api, acct);
-      //     setDisplayText('');
-      //     setIsLoading(false);
-      //   }
-      // });
     }
-
-    // const handleCalculateSocietyPubkey = async (id) => {
-    //   // retrieve all published pubkeys and combine them
-    //   // these pubkeys are in G2...
-    //   let pubkeys = await api.query.society.rsvp(id);
-    //   let gpk = pubkeys.toHuman()
-    //     .reduce((a, b) => 
-    //       combine_pubkeys(a[1], b[1]));
-    //     console.log(gpk);
-    //   // TODO: maybe store in localstorage?
-    //   setGpkMap(new Map(gpkMap.set(id, gpk)));
-    // }
-
-
   // const calculateGroupSecretKey = () => {
   //   return society.reduce((a, b) => combine_secrets(a.secret, b.secret));
   // }
@@ -238,7 +277,7 @@ function App() {
       // the 'seed', random
       let seed = 23;
       // arbitrary
-      let r1 = 123123;
+      let r1 = 45432;
       // how can I convert this to my  'SerializablePublicKey"?
       let pubkeys = await api.query.society.pubkeys(id);
       // each one is (author, pkg1, pkg2)
@@ -256,8 +295,6 @@ function App() {
               { g1: b[1], g2: b[2] })
             );
       }
-      // let gpk = gpkMap.get(id);
-      // let msg = new TextEncoder().encode(message);
       let msg = message;
       if (msg.length > 32) {
         console.log('message too long');
@@ -269,20 +306,34 @@ function App() {
           msg += "0";
         }
       }
-      console.log(msg.length);
+      console.log('your message as bytes');
+      console.log(new TextEncoder().encode(msg));
       let ciphertext = encrypt(BigInt(seed), BigInt(r1), msg, gpk.g2);
-      console.log(ciphertext);
+      console.log('your ciphertext as bytes');
+      console.log(ciphertext.v);
+      let { cid } = await ipfs.add(ciphertext.v);
       api.tx.society.publish(
         id, 
         ciphertext.v, 
-        ciphertext.u, 
+        ciphertext.u,
         ciphertext.w,
-      ).signAndSend(acct, result => {
-        if (result.isInBlock) {
-          console.log('all good');
-        }
-        if (result.isFinalized) {
-          console.log('the tx is finalized');
+        r1,
+      ).signAndSend(acct, ({ status, events }) => {
+        if (status.isInBlock || status.isFinalized) {
+          // an event will contain the hash..
+          events.forEach(e => {
+            let readableEvent = e.event.toHuman();
+            if (readableEvent.method === 'PublishedData') {
+              let hash = e.event.data[0];
+              // now we want to store the association of the hash with a CID
+              // in practice, this would be done in a smart contract
+              // for now, I'll just do store it in localstorage since I'm testing on one browser
+              // map hash to cid
+              localStorage.setItem(hash, cid);
+              // map cid to a society (so we can get the threshold value later on)
+              localStorage.setItem(cid, id);
+            }
+          });
         }
       });
     }
@@ -384,11 +435,119 @@ function App() {
                     Publish
                   </button>
                 </div>
+                <button onClick={() => handleQueryFs(s.id)}>
+                  Show File System
+                </button>
               </div>
           </li>);
           }) }
           </ul>
         </div>
+      </div>
+    );
+  }
+
+  const SharedData = () => {
+
+    const handleDecrypt = async(id, hash_, cid, sks) => {
+      let r2 = 48484;
+      // fetch ciphertext by CID
+      let result = await ipfs.cat(CID.parse(cid));
+      let ct;
+      for await (const item of result) {
+         ct = item;
+      }
+      console.log(ct);
+      // get u and w values from Fs
+      let files = await api.query.society.fs(id);
+      let target = files.find(f => f.hash_ == hash_);
+      // calcualate secret key
+      let gsk = sks.reduce((a, b) => combine_secrets(a, b));
+      let plaintext = threshold_decrypt(BigInt(r2), ct, target.u, gsk);
+      console.log('plaintext ' + plaintext);
+    }
+
+    return (
+      <div className='section'>
+        <span>Shared Data</span>
+        <div className='container'>
+          <button onClick={handleQueryReencryptionKeys}>click me</button>
+          <ul>
+            { [...sharedKeys.keys()].map((entry, i) => {
+              let k = sharedKeys.get(entry);
+              let rks = k.map(j => j.rk);
+              console.log('rks ' + JSON.stringify(rks));
+              return (
+                <li key={i}>
+                  <div className='section'>
+                    { entry }
+                    <span>Society { k[0].society_id }</span>
+                    <span>CID {k[0].cid}</span>
+                    <span>Threshold { k[0].threshold }</span>
+                    { k.length < k[0].threshold ?
+                      <div>
+                        <span>Insufficient shares for decryption `({k.length}) of ({k[0].threshold})`</span>
+                      </div> :
+                      <div>
+                        <button onClick={async () => handleDecrypt(k[0].society_id, entry, k[0].cid, rks)}>
+                          Decrypt
+                        </button>
+                      </div>
+                      }
+                  </div>
+                </li>
+              )
+            }) }
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  const FileSystem = () => {
+    
+    const [recipient, setRecipient] = useState('');
+
+    const handleSubmitReencryptionKeys = async(hash) => {
+      // calculate your secret
+      let localId = selectedSociety + ':' + acct.address;
+      let poly = JSON.parse(localStorage.getItem(localId));
+      let secret = calculate_secret(poly.coeffs);
+      // TODO: encrypt the secret
+      api.tx.society.submitReencryptionKey(
+        selectedSociety, recipient, hash, secret,
+      ).signAndSend(acct, result => {
+        if (result.isFinalized) {
+          console.log('done');
+        }
+      });
+    }
+
+    return (
+      <div className='section fs'>
+        <span>Active files for {selectedSociety}</span>
+        <ul>
+          { files.map((f, i) => {
+            return (
+              <li key={i}>
+                <div className='section'>
+                  <span>Author { JSON.parse(f).author }</span>
+                  <span>hash { JSON.parse(f).hash }</span>
+                  <div className='section'>
+                    <label>To</label>
+                    <input type="text" 
+                      value={recipient} 
+                      onChange={e => setRecipient(e.target.value)} />
+                    <button onClick={() => handleSubmitReencryptionKeys(JSON.parse(f).hash)}>
+                      Distribute keys
+                    </button>
+                  </div>
+                  
+                </div>
+              </li>
+            )
+          }) }
+        </ul>
       </div>
     );
   }
@@ -477,9 +636,14 @@ function App() {
       <div className='body'>
         <div className='section'>
           <Memberships />
+          {/* you can only see one 'file system' at a time */}
+          <FileSystem />
         </div>
         <div className='section'>
           <CreateSociety />
+        </div>
+        <div>
+        <SharedData />
         </div>
       </div>
     </div>
