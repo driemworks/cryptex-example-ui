@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@emotion/react": "^11.10.8",
+    "@emotion/styled": "^11.10.8",
+    "@mui/material": "^5.12.2",
     "@polkadot/api": "^10.3.4",
     "@polkadot/util": "^12.0.1",
     "@testing-library/jest-dom": "^5.16.5",
@@ -10,6 +13,7 @@
     "@testing-library/user-event": "^13.5.0",
     "as-bind": "^0.8.2",
     "dkg-wasm": "../dkg/dkg-wasm/pkg",
+    "eventemitter3": "^5.0.1",
     "ipfs-http-client": "^60.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

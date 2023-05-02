@@ -24,6 +24,10 @@ ipfs config --json API.HTTPHeaders.Access-Control-Allow-Credentials "[\"true\"]"
 ```
 
 ##  TODO
+- [ ] redesign... everything
+  - [ ] add routes 
+- [ ] encrypt/decrypt share before transmission
 - [ ] make seeds random
 - [ ] separate into components
+- [ ] use extension to get account https://polkadot.js.org/docs/extension/usage/
 - [ ] call smart contract
