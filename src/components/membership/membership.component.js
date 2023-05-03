@@ -25,9 +25,9 @@ const Memberships = (props) => {
       }
     }, [props.acct]);
 
-    const activeSocietyListener = async (api, acct) => {
-      let ids = await api.query.society.membership(acct.address, "active");
-      setActiveIds(ids);
+  const activeSocietyListener = async (api, acct) => {
+    let ids = await api.query.society.membership(acct.address, "active");
+    setActiveIds(ids);
   }
 
   const inviteeSocietyListener = async (api, acct) => {
@@ -56,7 +56,7 @@ const Memberships = (props) => {
     setIsLoading(true);
     setDisplayText([...displayText, 'Generating secrets']);
     // TODO: make random
-    let seed = 23;
+    let seed = Math.floor(Math.random() * 100000000) + 1;
     let poly = keygen(BigInt(seed), threshold);
     let localId = id.toHuman() + ':' + props.acct.address;
     localStorage.setItem(localId, JSON.stringify(poly));
@@ -103,11 +103,13 @@ const Memberships = (props) => {
     setIsLoading(true);
     setDisplayText("Encrypting data");
     // the 'seed', random
-    let seed = 23;
+    let seed = Math.floor(Math.random() * 100000000) + 1;
     // arbitrary
     let r1 = 45432;
     // how can I convert this to my  'SerializablePublicKey"?
     let pubkeys = await props.api.query.society.pubkeys(id);
+    console.log('pubkeys');
+    console.log(pubkeys);
     // each one is (author, pkg1, pkg2)
     let gpk;
     if (pubkeys.length === 1) {
@@ -122,6 +124,8 @@ const Memberships = (props) => {
             { g1: b[1], g2: b[2] })
           );
     }
+    console.log('gpk');
+    console.log(gpk);
     let msg = message;
     if (msg.length > 32) {
       console.log('message too long');
@@ -344,15 +348,6 @@ const Memberships = (props) => {
             return (<li key={idx}>
               <div className='section'>
                 <Active id={id} api={props.api} />
-                {/* <span>
-                  name: { society.name }
-                </span>
-                <div>
-                  <input id="message-input" type="text" placeholder='Write a message' value={message} onChange={e => setMessage(e.target.value)} />
-                  <button onClick={() => handlePublishMessage(s.id)}>
-                    Publish message (max 32 bytes)
-                  </button>
-                </div> */}
               </div>
           </li>);
           }) }

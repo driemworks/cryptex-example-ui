@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { calculate_secret } from "dkg-wasm";
 
 const FileSystem = (props) => {
@@ -6,17 +6,22 @@ const FileSystem = (props) => {
     const [selectedSociety, setSelectedSociety] = useState('');
     const [files, setFiles] = useState([]);
     const [recipient, setRecipient] = useState('');
+    const [activeIds, setActiveIds] = useState([]);
 
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+      if (props.api !== null) {
+        activeSocietyListener();
+      }
+    }, [props.api]);
 
     const handleSubmitReencryptionKeys = async(hash) => {
         setIsLoading(true);
         // calculate your secret
         let localId = selectedSociety + ':' + props.acct.address;
-        console.log('local id ' +  localId)
         let poly = JSON.parse(localStorage.getItem(localId));
         let secret = calculate_secret(poly.coeffs);
-        console.log('the secret is ' + secret);
         // TODO: encrypt the secret
         props.api.tx.society.submitReencryptionKey(
             selectedSociety, recipient, hash, secret,
@@ -32,6 +37,12 @@ const FileSystem = (props) => {
       setFiles(fs);
     }
 
+    const activeSocietyListener = async () => {
+      let ids = await props.api.query.society.membership(
+        props.acct.address, "active");
+      setActiveIds(ids);
+    }
+
     return (
       <div className='section fs'>
         <label htmlFor='society-input'>Set society id</label>
@@ -39,7 +50,7 @@ const FileSystem = (props) => {
         <button onClick={handleQueryFs}>Search</button>
         { isLoading === true ? 
         <div>
-            <span>Submitting keys...</span>
+            <span>Submitting reencryption key</span>
         </div> :
         <ul>
           { files.map((f, i) => {
@@ -48,6 +59,7 @@ const FileSystem = (props) => {
                 <div className='section'>
                   <span>Author { JSON.parse(f).author }</span>
                   <span>hash { JSON.parse(f).hash }</span>
+                  { activeIds.indexOf(selectedSociety) !== -1 ?
                   <div className='section'>
                     <label>To</label>
                     <input type="text" 
@@ -57,7 +69,7 @@ const FileSystem = (props) => {
                       Distribute keys
                     </button>
                   </div>
-                  
+                  : <div></div> }
                 </div>
               </li>
             )
