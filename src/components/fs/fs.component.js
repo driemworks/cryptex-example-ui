@@ -11,7 +11,7 @@ const FileSystem = (props) => {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-      if (props.api !== null) {
+      if (props.api !== null && props.acct !== null) {
         activeSocietyListener();
       }
     }, [props.api]);

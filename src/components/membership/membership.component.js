@@ -108,8 +108,6 @@ const Memberships = (props) => {
     let r1 = 45432;
     // how can I convert this to my  'SerializablePublicKey"?
     let pubkeys = await props.api.query.society.pubkeys(id);
-    console.log('pubkeys');
-    console.log(pubkeys);
     // each one is (author, pkg1, pkg2)
     let gpk;
     if (pubkeys.length === 1) {
@@ -124,8 +122,6 @@ const Memberships = (props) => {
             { g1: b[1], g2: b[2] })
           );
     }
-    console.log('gpk');
-    console.log(gpk);
     let msg = message;
     if (msg.length > 32) {
       console.log('message too long');
