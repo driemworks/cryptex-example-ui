@@ -3,26 +3,44 @@
 }
 
 .header {
+  display: flex;
+  background: rgb(202, 200, 200);
+}
+
+.header-details {
   display: grid;
 }
 
+.title {
+  margin: 0 auto;
+}
+
 .body {
+  font-family: 'Courier New', Courier, monospace;
   /* display: inline-grid; */
 }
 
+.content {
+  display: flex;
+}
+
 .section {
-  display: inline-grid;
-  border: solid 1px black;
-  padding: 5px;
-  margin: 10px;
+  display: contents;
+  /* display: inline-grid; */
+  /* margin: 0 auto; */
+  /* padding-top: 5vh; */
+  /* margin-left: 30vw; */
+
+}
+
+.section-title {
+  padding: 20px;
 }
 
 .form {
-  display: contents;
+  /* margin: 0 auto;  */
 }
 
-.fs {
-  max-height: 20vw;
-  overflow: scroll;
-  background-color: gainsboro;
+.hoverable:hover {
+  color: blue;
 }

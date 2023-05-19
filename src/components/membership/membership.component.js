@@ -1,44 +1,73 @@
 /* global BigInt */
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { 
     keygen, calculate_pubkey, combine_pubkeys,
     calculate_shares_and_commitments, calculate_secret,
     encrypt } from 'dkg-wasm';
+
+import Tab from '@mui/material/Tab';
+import TabContext from '@mui/lab/TabContext';
+import TabList from '@mui/lab/TabList';
+import TabPanel from '@mui/lab/TabPanel';
+import Box from '@mui/material/Box';
+
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Typography from '@mui/material/Typography';
+
+import './membership.component.css';
+import { Button } from "@mui/material";
+import TruncatedDisplay from "../common/truncate-display.component";
+
 const Memberships = (props) => {
 
+    // const [ignored, forceUpdate] = useReducer(x => x + 1, 0);
     const [isLoading, setIsLoading] = useState(false);
     const [displayText, setDisplayText] = useState([]);
 
     const [inviteIds, setInviteIds] = useState([]);
     const [committedIds, setCommittedIds] = useState([]);
     const [activeIds, setActiveIds] = useState([]);
+    const [foundedIds, setFoundedIds] = useState([]);
+    const [selectSocietyPhase, setSelectSocietyPhase] = useState('');
 
     useEffect(() => { 
       let mounted = true;
       if (props.acct !== null) {
         if (mounted === true) {
-          activeSocietyListener(props.api, props.acct);
-          committedSocietyListener(props.api, props.acct);
-          inviteeSocietyListener(props.api, props.acct);
+          getSocieties();
           mounted = false;
         }
       }
     }, [props.acct]);
 
-  const activeSocietyListener = async (api, acct) => {
+  const getSocieties = async () => {
+    await activeSocietyListener(props.api, props.acct);
+    await committedSocietyListener(props.api, props.acct);
+    await inviteeSocietyListener(props.api, props.acct);
+    await foundedSocietyListener(props.api, props.acct);
+  }
+
+  const activeSocietyListener = async(api, acct) => {
     let ids = await api.query.society.membership(acct.address, "active");
     setActiveIds(ids);
   }
 
-  const inviteeSocietyListener = async (api, acct) => {
+  const inviteeSocietyListener = async(api, acct) => {
     let ids = await api.query.society.membership(acct.address, "invitee");
     setInviteIds(ids);
   }
 
-  const committedSocietyListener  = async (api, acct) => {
+  const committedSocietyListener = async(api, acct) => {
     let ids = await api.query.society.membership(acct.address, "committed");
     setCommittedIds(ids);
   } 
+
+  const foundedSocietyListener = async(api, acct) => {
+    let ids = await api.query.society.membership(acct.address, "founder");
+    setFoundedIds(ids);
+  }
 
   const handleQuerySociety = async(api, id) => {
     let society = await api.query.society.societies(id);
@@ -50,54 +79,17 @@ const Memberships = (props) => {
     return status;
   }
 
-  const handleKeygen = (id, threshold, size) => {
-    let r1 = 45432;
-    let r2 = 48484;
-    setIsLoading(true);
-    setDisplayText([...displayText, 'Generating secrets']);
-    // TODO: make random
-    let seed = Math.floor(Math.random() * 100000000) + 1;
-    let poly = keygen(BigInt(seed), threshold);
-    let localId = id.toHuman() + ':' + props.acct.address;
-    localStorage.setItem(localId, JSON.stringify(poly));
-    setDisplayText([...displayText, 'Calculating shares and commitments']);
-    let sharesAndCommitments = calculate_shares_and_commitments(
-      threshold, size, BigInt(r2), poly.coeffs,
-    );
-    setDisplayText([...displayText, 'Submitting signed tx']);
-    props.api.tx.society.commit(
-      id, sharesAndCommitments,
-    ).signAndSend(props.acct, result => {
-      if (result.isFinalized) {
-        setDisplayText([...displayText, 'Tx finalized']);
-        setDisplayText([]);
-        setIsLoading(false);
-      }
-    });
+  const handleQuerySharesAndCommitments = async (api, id) => {
+    let shares = await api.query.society.sharesAndCommitments(id);
+    return shares;
   }
 
-  const handleJoin = (id) => {
-    setIsLoading(true);
-    setDisplayText([...displayText, 'Recovering secrets']);
-    let localId = id.toHuman() + ':' + props.acct.address;
-    let poly = JSON.parse(localStorage.getItem(localId));
-    // TODO: these vals should be encoded in the society?
-    let r1 = 45432;
-    let r2 = 48484;
-    let secret = calculate_secret(poly.coeffs);
-    setDisplayText([...displayText, 'Calculating pubkey']);
-    let pubkey = calculate_pubkey(BigInt(r1), BigInt(r2), secret);
-    setDisplayText([...displayText, 'Submitting signed tx']);
-    props.api.tx.society.join(
-      id, pubkey.g1, pubkey.g2,
-    ).signAndSend(props.acct, ({ status, events }) => {
-      if (status.isInBlock) {
-      //   updateMembershipMaps(props.api, props.acct);
-        setDisplayText([]);
-        setIsLoading(false);
-      }
-    });
+  const handleQueryPubkeys = async (api, id) => {
+    let pks = await api.query.society.pubkeys(id);
+    return pks;
   }
+
+
 
   const handlePublishMessage = async (id, message) => {
     setIsLoading(true);
@@ -144,20 +136,21 @@ const Memberships = (props) => {
       ciphertext.u,
       ciphertext.w,
       r1,
+      cid,
     ).signAndSend(props.acct, ({ status, events }) => {
       if (status.isInBlock || status.isFinalized) {
         // an event will contain the hash..
         events.forEach(e => {
           let readableEvent = e.event.toHuman();
           if (readableEvent.method === 'PublishedData') {
-            let hash = e.event.data[0];
-            // now we want to store the association of the hash with a CID
-            // in practice, this would be done in a smart contract
-            // for now, I'll just do store it in localstorage since I'm testing on one browser
-            // map hash to cid
-            localStorage.setItem(hash, cid);
-            // map cid to a society (so we can get the threshold value later on)
-            localStorage.setItem(cid, id);
+            // let hash = e.event.data[0];
+            // // now we want to store the association of the hash with a CID
+            // // in practice, this would be done in a smart contract
+            // // for now, I'll just do store it in localstorage since I'm testing on one browser
+            // // map hash to cid
+            // localStorage.setItem(hash, cid);
+            // // map cid to a society (so we can get the threshold value later on)
+            // localStorage.setItem(cid, id);
             setIsLoading(false);
             setDisplayText([]);
           }
@@ -166,16 +159,100 @@ const Memberships = (props) => {
     });
   }
 
+  const PhaseManager = (props) => {
+
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleTryForceJoinPhase = async (api, acct, id) => {
+      setIsLoading(true);
+      await api.tx.society
+        .tryForceJoinPhase(id)
+        .signAndSend(acct, result => {
+          if (result.isInBlock) {
+            console.log('updated to join phase');
+            setIsLoading(false);
+            getSocieties();
+          }
+        });
+    }
+  
+    const handleTryForceActivePhase = async (api, acct, id) => {
+      setIsLoading(true);
+      await api.tx.society
+        .tryForceActivePhase(id)
+        .signAndSend(acct, result => {
+          if (result.isInBlock) {
+            console.log('updated to active phase');
+            // forceUpdate();
+            setIsLoading(false);
+            getSocieties();
+          }
+        });
+    }
+
+    return (
+      <div>
+        <span>Society in phase: { JSON.stringify(props.info.phase[0][1]) }</span>
+        {
+          // if you are the owner
+          // if there are at least a threshold of commitments
+          props.info.society.founder === props.acct.address
+            && props.shareCount >= props.info.society.threshold ? 
+          <div>
+            { props.info.phase[0][1] === 'Commit' ? 
+            <div>
+              { !isLoading ?
+              <Button onClick={() => handleTryForceJoinPhase(props.api, props.acct, props.id)}>
+              Step to Join Phase</Button> :
+              <div>
+                Loading...
+              </div>
+              }
+            </div>
+            : props.info.phase[0][1] === 'Join' ? 
+            <div>
+              { props.pubkeys.length >= props.info.society.threshold ? 
+                <div>
+                  { !isLoading ?
+                  <Button onClick={() => handleTryForceActivePhase(props.api, props.acct, props.id)}>
+                    Activate Society
+                  </Button> :
+                  <div>
+                    Loading...
+                  </div>
+                }
+                </div> :
+                <div>
+                  <span>Waiting for more commitments: received {props.pubkeys.length} of {props.info.society.threshold}</span>
+                </div>
+              }
+              
+            </div> :
+            <div>
+            </div>
+            }
+          </div>
+          : <div>Waiting for commitments</div>
+        }
+      </div>
+    );
+  }
+
   const Invite = (props) => {
     const [invitationInfo, setInvitiationInfo] = useState([]);
+    const [shareCount, setShareCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
     const queryInviteInfo = () => {
       Promise.all([
         handleQuerySociety(props.api, props.id),
         handleQuerySocietyStatus(props.api, props.id),
+        handleQuerySharesAndCommitments(props.api, props.id),
       ]).then(response => {
         let society = response[0].toHuman();
         let statusArray = response[1].toHuman();
+        let shares = response[2].toHuman();
+        setShareCount(shares.length);
         if (statusArray.length > 0) {
           let latest = statusArray.slice(-1);
           setInvitiationInfo({society: society, phase: latest});
@@ -183,47 +260,93 @@ const Memberships = (props) => {
       });
     }
 
+    const handleKeygen = (id, threshold, size) => {
+      let r1 = 45432;
+      let r2 = 48484;
+      setIsLoading(true);
+      let seed = Math.floor(Math.random() * 10000000) + 1;
+      let poly = keygen(BigInt(seed), threshold);
+      let localId = id.toHuman() + ':' + props.acct.address;
+      localStorage.setItem(localId, JSON.stringify(poly));
+      let sharesAndCommitments = calculate_shares_and_commitments(
+        threshold, size, BigInt(r2), poly.coeffs,
+      );
+      props.api.tx.society.commit(
+        id, sharesAndCommitments,
+      ).signAndSend(props.acct, result => {
+        if (result.isInBlock) {
+          setIsLoading(false);
+          getSocieties();
+        }
+      });
+    }
+  
+  
     return (
-      <div>
-        <button onClick={queryInviteInfo}>
-          Society Id { props.id.toHuman() }
-        </button>
-        { invitationInfo.length === 0 ?
-          <div></div>:
-          <div className="section">
-            <span>
-              Founded By { invitationInfo.society.founder }
-            </span>
-            <span>
-              Threshold { invitationInfo.society.threshold }
-            </span>
-            { invitationInfo.phase[0][1] === "Commit" ?
-            <button onClick={() => handleKeygen(
-              props.id, invitationInfo.society.threshold, 
-              invitationInfo.society.members.length + 1, 48484
-              )}> Commit 
-            </button>
-            : 
-            <div>
-              In Phase: { JSON.stringify(invitationInfo.phase) }
-            </div>
+      <Accordion onChange={queryInviteInfo}>
+        <AccordionSummary>
+          <Typography sx={{ width: '50%', flexShrink: 0 }}>
+            Society Id { props.id.toHuman() }
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <div>
+            { invitationInfo.length === 0 ?
+              <div></div>:
+              <div className="society">
+                <TruncatedDisplay data={invitationInfo.society.founder} message="Founded by: "/>
+                {/* <span> */}
+                  {/* Founded By { .slice(0, 12) + '...' } */}
+                {/* </span> */}
+                <span>
+                  Commitments: {shareCount} of { invitationInfo.society.threshold }
+                </span>
+                <PhaseManager
+                  api={props.api} acct={props.acct} 
+                  id={props.id} shareCount={shareCount} info={invitationInfo}
+                  pubkeys={[]}
+                />
+                { invitationInfo.phase[0][1] === "Commit" ?
+                <div>
+                  { !isLoading ?
+                  <Button onClick={() => handleKeygen(
+                    props.id, invitationInfo.society.threshold, 
+                    invitationInfo.society.members.length + 1, 48484
+                    )}> Commit 
+                  </Button> :
+                  <div>
+                    Loading...
+                  </div>
+                  }
+                </div>
+                : 
+                <div>
+                  In Phase: { JSON.stringify(invitationInfo.phase) }
+                </div>
+                }
+              </div>
             }
           </div>
-        }
-      </div>
+        </AccordionDetails>
+      </Accordion>
     );
   }
 
   const Committed = (props) => {
     const [info, setInfo] = useState([]);
+    const [shareCount, setShareCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
 
     const queryInfo = () => {
       Promise.all([
         handleQuerySociety(props.api, props.id),
         handleQuerySocietyStatus(props.api, props.id),
+        handleQuerySharesAndCommitments(props.api, props.id),
       ]).then(response => {
         let society = response[0].toHuman();
         let statusArray = response[1].toHuman();
+        let shares = response[2].toHuman();
+        setShareCount(shares.length);
         if (statusArray.length > 0) {
           let latest = statusArray.slice(-1);
           setInfo({society: society, phase: latest});
@@ -231,31 +354,66 @@ const Memberships = (props) => {
       });
     }
 
+    const handleJoin = (id) => {
+      setIsLoading(true);
+      let localId = id.toHuman() + ':' + props.acct.address;
+      let poly = JSON.parse(localStorage.getItem(localId));
+      // TODO: these vals should be encoded in the society?
+      let r1 = 45432;
+      let r2 = 48484;
+      let secret = calculate_secret(poly.coeffs);
+      let pubkey = calculate_pubkey(BigInt(r1), BigInt(r2), secret);
+      props.api.tx.society.join(
+        id, pubkey.g1, pubkey.g2,
+      ).signAndSend(props.acct, ({ status, events }) => {
+        if (status.isInBlock) {
+          setIsLoading(false);
+          getSocieties();
+        }
+      });
+    }
+
     return (
-      <div>
-        <button onClick={queryInfo}>
+      <Accordion onChange={queryInfo}>
+        <AccordionSummary>
+          <Typography sx={{ width: '50%', flexShrink: 0 }}>
           Society Id { props === null ? '' : props.id.toHuman() }
-        </button>
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
         { info.length === 0 ?
           <div></div>:
-          <div className="section">
-            <span>
-              Founded By { info.society.founder }
-            </span>
+          <div className="society">
+            {/* <span>
+              Founded By { info.society.founder.slice(0, 8) + '...' }
+            </span> */}
+            <TruncatedDisplay data={info.society.founder} message="Founded by: "/>
             <span>
               Threshold { info.society.threshold }
             </span>
-            { info.phase[0][1] === "Join" ?
-            <button onClick={() => handleJoin(props.id)}> Join
-            </button>
-            : 
+            <PhaseManager
+              api={props.api} acct={props.acct} 
+              id={props.id} shareCount={shareCount} info={info}
+              pubkeys={[]}
+            />
             <div>
-              In Phase: { JSON.stringify(info.phase) }
+              { info.phase[0][1] === "Join" ?
+              <div>
+                { !isLoading ? 
+                <Button onClick={() => handleJoin(props.id)}>Join</Button> :
+                <div>
+                  Loading...
+                </div>
+              }</div> : 
+              <div>
+                Waiting for founder to update phase.
+              </div>
+              }
             </div>
-            }
           </div>
         }
-      </div>
+        </AccordionDetails>
+      </Accordion>
     );
   }
 
@@ -263,14 +421,22 @@ const Memberships = (props) => {
 
     const [message, setMessage] = useState('');
     const [info, setInfo] = useState([]);
+    const [shareCount, setShareCount] = useState(0);
+    const [pubkeys, setPubkeys] = useState([]);
 
     const queryInfo = () => {
       Promise.all([
         handleQuerySociety(props.api, props.id),
         handleQuerySocietyStatus(props.api, props.id),
+        handleQuerySharesAndCommitments(props.api, props.id),
+        handleQueryPubkeys(props.api, props.id),
       ]).then(response => {
         let society = response[0].toHuman();
         let statusArray = response[1].toHuman();
+        let shares = response[2].toHuman();
+        setShareCount(shares.length);
+        let pks = response[3].toHuman();
+        setPubkeys(pks);
         if (statusArray.length > 0) {
           let latest = statusArray.slice(-1);
           setInfo({society: society, phase: latest});
@@ -279,79 +445,145 @@ const Memberships = (props) => {
     }
 
     return (
-      <div>
-        <button onClick={queryInfo}>
-          Society Id { props.id.toHuman() }
-        </button>
+      <Accordion onChange={queryInfo}>
+        <AccordionSummary>
+          <Typography sx={{ width: '50%', flexShrink: 0 }}>
+          Society Id { props === null ? '' : props.id.toHuman() }
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
         { info.length === 0 ?
           <div></div>:
-          <div className="section">
-            <span>
+          <div className="society">
+            {/* <span>
               Founded By { info.society.founder }
-            </span>
+            </span> */}
+            <TruncatedDisplay data={info.society.founder} message="Founded by: "/>
             <span>
               Threshold { info.society.threshold }
             </span>
+            { info.phase[0][1] !== 'Active' ? 
+            <div>
+              <PhaseManager
+                api={props.api} acct={props.acct} 
+                id={props.id} shareCount={shareCount} info={info}
+                pubkeys={pubkeys}
+              />
+            </div>
+            :
             <div>
               <input id="message-input" type="text" placeholder='Write a message' value={message} onChange={e => setMessage(e.target.value)} />
-              <button onClick={() => handlePublishMessage(props.id, message)}>
+              <Button onClick={() => handlePublishMessage(props.id, message)}>
                 Publish message (max 32 bytes)
-              </button>
+              </Button>
             </div>
+            }
           </div>
         }
-      </div>
+      </AccordionDetails>
+      </Accordion>
     );
   }
 
+  const Founded = (props) => {
+
+    const [info, setInfo] = useState([]);
+    const [shareCount, setShareCount] = useState(0);
+    const [pubkeys, setPubkeys] = useState([]);
+
+    const queryInfo = () => {
+      Promise.all([
+        handleQuerySociety(props.api, props.id),
+        handleQuerySocietyStatus(props.api, props.id),
+        handleQuerySharesAndCommitments(props.api, props.id),
+        handleQueryPubkeys(props.api, props.id),
+      ]).then(response => {
+        let society = response[0].toHuman();
+        let statusArray = response[1].toHuman();
+        let shares = response[2].toHuman();
+        setShareCount(shares.length);
+        let pks = response[3].toHuman();
+        setPubkeys(pks);
+        if (statusArray.length > 0) {
+          let latest = statusArray.slice(-1);
+          setInfo({society: society, phase: latest});
+        }
+      });
+    }
+
+    return (
+      <Accordion onChange={queryInfo}>
+        <AccordionSummary>
+          <Typography sx={{ width: '50%', flexShrink: 0 }}>
+          Society Id { props === null ? '' : props.id.toHuman() }
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+        { info.length === 0 ?
+          <div></div>:
+          <div className="society">
+            <div>
+              <PhaseManager
+                api={props.api} acct={props.acct} 
+                id={props.id} shareCount={shareCount} info={info}
+                pubkeys={pubkeys}
+              />
+            </div>
+          </div>
+        }
+        </AccordionDetails>
+      </Accordion>
+    );
+  }
+
+  const handleSelectSocietyPhase = (event, newValue) => {
+    setSelectSocietyPhase(newValue);
+  };
+
   return (
-    <div className='membership-container'>
-      { isLoading === true ? 
-      <div>
-        { displayText }
-      </div> :
-      <div>
-        <div className='container'>
-          <span>Invites ({inviteIds.length})</span>
-          <ul>
-          { inviteIds.map((invite, idx) => {
-            return (<li key={idx}>
-              <div className='section'>
-                <Invite id={invite} api={props.api} />
-              </div>
-            </li>);
-          }) }
-          </ul>
-        </div>
-
-        <div className='container'>
-          <span>Committed ({ committedIds.length })</span>
-          <ul>
-          { committedIds.map((id, idx) => {
-            return (<li key={idx}>
-              <div className='section'>
-                <Committed id={id} api={props.api} />
-              </div>
-            </li>);
-          }) }
-          </ul>
-        </div>
-
-        <div className='container'>
-          <span>Active ({ activeIds.length })</span>
-          <ul> 
-          { activeIds.map((id, idx) => {
-            return (<li key={idx}>
-              <div className='section'>
-                <Active id={id} api={props.api} />
-              </div>
-          </li>);
-          }) }
-          </ul>
-        </div>
-      
+    <div className='section'>
+      <div className="membership-container">
+        <div>
+          <TabContext value={selectSocietyPhase}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <TabList onChange={handleSelectSocietyPhase} aria-label="lab API tabs example">
+              <Tab label={"Invites (" + inviteIds.length + ")"} disabled={inviteIds.length === 0} />
+              <Tab label={"Committed (" + committedIds.length + ")"} disabled={committedIds.length === 0} />
+              <Tab label={"Active (" + activeIds.length + ")"} disabled={activeIds.length === 0} />
+              <Tab label={"Founded (" + foundedIds.length + ")"} disabled={foundedIds.length === 0} />
+            </TabList>
+          </Box>
+          <TabPanel value={0}>
+            <div>
+            { inviteIds.map((invite, idx) => {
+              return (<Invite id={invite} api={props.api} acct={props.acct} />);
+            }) }
+            </div>
+          </TabPanel>
+          <TabPanel value={1}>
+            <div>
+            { committedIds.map((id, idx) => {
+              return (<Committed id={id} api={props.api} acct={props.acct} />);
+            }) }
+            </div>
+          </TabPanel>
+          <TabPanel value={2}>
+            <div>
+              { activeIds.map((id, idx) => {
+                return (<Active id={id} api={props.api} acct={props.acct} />);
+              })}
+            </div>
+          </TabPanel>
+          <TabPanel value={3}>
+            <div>
+              { foundedIds.map((id, idx) => {
+                return (<Founded id={id} api={props.api} acct={props.acct} />);
+              })}
+            </div>
+          </TabPanel>
+        </TabContext>
       </div>
-      }
+      </div>
     </div>
   );
 }

@@ -2,12 +2,22 @@
 import './App.css';
 import { ApiPromise, WsProvider, Keyring } from "@polkadot/api";
 import { useWasm } from './useWasm';
-import { useEffect, useReducer, useState } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import { create } from 'ipfs-http-client';
 import CreateSociety from './components/create-society/create-society.component';
 import Memberships from './components/membership/membership.component';
 import FileSystem from './components/fs/fs.component';
 import SharedData from './components/shared/shared.component';
+
+
+import { Sidebar, Menu, MenuItem, SubMenu } from 'react-pro-sidebar';
+import Events from './events.component';
+import { Button, IconButton, Snackbar, TextField, Tooltip } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import TruncatedDisplay from './components/common/truncate-display.component';
+
+
 // TODO: use extension to get account
 // https://polkadot.js.org/docs/extension/usage/
 function App() {
@@ -18,7 +28,9 @@ function App() {
 
   const [ipfs, setIpfs] = useState(null);
   const [api, setApi] = useState(null);
+  const [kr, setKr] = useState(null);
   const [acct, setAcct] = useState(null);
+  const [editUri, setEditUri] = useState(false);
 
   const [newUri, setNewUri] = useState('');
   const [blockNumber, setBlockNumber] = useState(0);
@@ -54,6 +66,7 @@ function App() {
       const keyring = new Keyring({ type: 'sr25519' });
       let uriAcct = keyring.addFromUri(uri);
       setAcct(uriAcct);
+      setKr(keyring);
       await initEventListener(api, uriAcct);
       await blockListener(api);
     }
@@ -82,45 +95,67 @@ function App() {
     // });
   }
 
+  const [activeComponentName, setActiveComponentName] = useState('');
+  const [ActiveComponent, setActiveComponent] = useState(<div></div>);
+
+  const handleSetDisplay = (componentName) => {
+    setActiveComponentName(componentName);
+    if (componentName === 'create') {
+      setActiveComponent(<CreateSociety api={api} acct={acct} />);
+    } else if (componentName === 'memberships') {
+      setActiveComponent(<Memberships 
+        api={api} 
+        acct={acct} 
+        ipfs={ipfs}
+      />);
+    } else if (componentName === 'filesystem') {
+      setActiveComponent(<FileSystem api={api} acct={acct} />);
+    } else if (componentName === 'shared') {
+      setActiveComponent(<SharedData acct={acct} api={api} ipfs={ipfs} />);
+    } else {
+      setActiveComponent(<div>Well, this should not have happened...</div>);
+    }
+  }
+
   return (
     <div className="App">
       <div className='header'>
-        <h2>Enigma</h2>
-        <span>
-          Api is { api === null ? 'not' : '' } ready
-        </span>
-        <div className='form'>
-          <span>block number {blockNumber}</span>
-          { acct === null ? '' : acct.address }
+        <div className='title'>
+          <h2>Enigma</h2>
+        </div>
+        <div className='header-details'>
+          <span>
+            Api is { api === null ? 'not' : '' } ready
+          </span>
+          { acct === null ? <div>connect Wallet</div> :
+          <TruncatedDisplay data={acct.address} message="Address: " /> }
         </div>
       </div>
       <div className='body'>
         { uri === '' ?
         <div>
-          <label htmlFor='uri'>Set URI</label>
-          <input id='uri' type="text" value={newUri} onChange={e => { setNewUri(e.target.value) }} />
-          <button onClick={() => { forceUpdate(); setUri(newUri); }}>Submit</button>
+          {api === null ? <div>API not ready</div> :
+          <div>
+            <label htmlFor='uri'>Set URI</label>
+            <input id='uri' type="text" value={newUri} onChange={e => { setNewUri(e.target.value) }} />
+            <Button onClick={() => { forceUpdate(); setUri(newUri); }}>Submit</Button>
+          </div>
+        }
         </div>
-        : <div>
-        <div className='section'>
-          <CreateSociety api={api} acct={acct} />
-        </div>
-        <div className='section'>
-          <Memberships 
-            api={api} 
-            acct={acct} 
-            ipfs={ipfs}
-          />
-        </div>
-        <div className='section'>
-          <FileSystem api={api} acct={acct} />
-        </div>
-        <div className='section'>
-          <SharedData acct={acct} api={api} ipfs={ipfs} />
-        </div>
+        : <div className='content'>
+          <Sidebar>
+            <Menu>
+              <MenuItem onClick={() => handleSetDisplay('create')}>Create Society</MenuItem>
+              <MenuItem onClick={() => handleSetDisplay('memberships')}>Societies</MenuItem>
+              <MenuItem onClick={() => handleSetDisplay('filesystem')}>View Files</MenuItem>
+              <MenuItem onClick={() => handleSetDisplay('shared')}>Shared With You</MenuItem>
+            </Menu>
+          </Sidebar>
+          { ActiveComponent }
         </div>
         }
       </div>
+      {/* <Events api={api} /> */}
     </div>
   );
 }

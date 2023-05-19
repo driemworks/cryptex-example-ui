@@ -1,8 +1,8 @@
-#  Cryptex Example
+#  Enigma
 
-This repo contains code for a react project that interacts with the cryptex blockchain. So far, this is solely PoC/Experiement level work.
+Enigma is an experiment
 
-This little experiment is able to show a nice way to separate the encryption of shares from the threshold scheme itself. Encryption and decryption of 'reencryption keys' does not need to rely on the 'threshold', it can be any flavor of encryption as determined by the client.
+> The code in this repo is experiment, use at your own risk.
 
 ## Setup
 
@@ -24,7 +24,10 @@ ipfs config --json API.HTTPHeaders.Access-Control-Allow-Credentials "[\"true\"]"
 ```
 
 ##  TODO
-- [ ] encrypt/decrypt share before transmission
+- [ ] encrypt/decrypt share
 - [ ] use extension to get account https://polkadot.js.org/docs/extension/usage/
 - [ ] deploy + call smart contract
-- [ ] allow arbitrary length messages, use new delimiter (using 0 for now for padding, not reall good)
+- [ ] use react router
+- [ ] allow arbitrary length messages, use new delimiter (using 0 for now for padding, not really good)
+- [ ] ipfs config + other settings
+- [ ] validate member addresses when creating society
