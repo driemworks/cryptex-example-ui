@@ -10,11 +10,9 @@ import FileSystem from './components/fs/fs.component';
 import SharedData from './components/shared/shared.component';
 
 
-import { Sidebar, Menu, MenuItem, SubMenu } from 'react-pro-sidebar';
+import { Sidebar, Menu, MenuItem } from 'react-pro-sidebar';
 import Events from './events.component';
 import { Button, IconButton, Snackbar, TextField, Tooltip } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import EditIcon from '@mui/icons-material/Edit';
 import TruncatedDisplay from './components/common/truncate-display.component';
 
 

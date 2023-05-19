@@ -36,7 +36,6 @@ const Events = (props) => {
         <div className="events-container">
             I AM HERE
             { eventsHistory.map((evt, idx) => {
-                console.log('hey');
                 return <DisplayEvent readableEvent={evt} />
             }) }
         </div>

@@ -197,13 +197,14 @@ const Memberships = (props) => {
           // if you are the owner
           // if there are at least a threshold of commitments
           props.info.society.founder === props.acct.address
-            && props.shareCount >= props.info.society.threshold ? 
+            && props.shareCount / props.info.society.members.length >= props.info.society.threshold ? 
           <div>
             { props.info.phase[0][1] === 'Commit' ? 
             <div>
               { !isLoading ?
               <Button onClick={() => handleTryForceJoinPhase(props.api, props.acct, props.id)}>
-              Step to Join Phase</Button> :
+                Update to Join Phase
+              </Button> :
               <div>
                 Loading...
               </div>
@@ -252,6 +253,7 @@ const Memberships = (props) => {
         let society = response[0].toHuman();
         let statusArray = response[1].toHuman();
         let shares = response[2].toHuman();
+        console.log(shares);
         setShareCount(shares.length);
         if (statusArray.length > 0) {
           let latest = statusArray.slice(-1);
@@ -281,7 +283,6 @@ const Memberships = (props) => {
       });
     }
   
-  
     return (
       <Accordion onChange={queryInviteInfo}>
         <AccordionSummary>
@@ -295,11 +296,8 @@ const Memberships = (props) => {
               <div></div>:
               <div className="society">
                 <TruncatedDisplay data={invitationInfo.society.founder} message="Founded by: "/>
-                {/* <span> */}
-                  {/* Founded By { .slice(0, 12) + '...' } */}
-                {/* </span> */}
                 <span>
-                  Commitments: {shareCount} of { invitationInfo.society.threshold }
+                  Commitments: { shareCount/invitationInfo.society.members.length } of { invitationInfo.society.threshold }
                 </span>
                 <PhaseManager
                   api={props.api} acct={props.acct} 
@@ -384,9 +382,6 @@ const Memberships = (props) => {
         { info.length === 0 ?
           <div></div>:
           <div className="society">
-            {/* <span>
-              Founded By { info.society.founder.slice(0, 8) + '...' }
-            </span> */}
             <TruncatedDisplay data={info.society.founder} message="Founded by: "/>
             <span>
               Threshold { info.society.threshold }

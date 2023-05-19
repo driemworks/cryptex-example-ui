@@ -117,7 +117,6 @@ const SharedData = (props) => {
           <TableBody>
           { [...sharedKeys.keys()].map((hash, i) => {
             let k = sharedKeys.get(hash);
-            console.log(k);
             let rks = k.map(j => j.rk).filter(k => k != undefined);
             return (<TableRow
               key={i}
