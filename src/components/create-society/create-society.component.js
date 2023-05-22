@@ -5,6 +5,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
+import './create-society.component.css';
 
 const CreateSociety = (props) => {
 
@@ -21,7 +22,7 @@ const CreateSociety = (props) => {
       setIsLoading(true);
       props.api.tx.society.create(
         id, threshold, name, deadline, members,
-      ).signAndSend(props.acct, result => {
+      ).signAndSend(props.addr, {signer: props.signer}, result => {
         if (result.isInBlock) {
           // will emit an event in the future
           setIsLoading(false);
@@ -40,36 +41,11 @@ const CreateSociety = (props) => {
 
     return (
       <div className='section'>
-        <div className="section-left">
-          <div className="section-title">
-            <span>
-              Create a Society
-            </span>
-          </div>
-          <Box
-            component="form"
-            sx={{
-              padding: 5,
-              width: 300,
-              '& .MuiTextField-root': { m: 1, width: '25ch' },
-            }}
-            noValidate
-            autoComplete="off"
-          >
-            <Stack spacing={{ xs: 1, sm: 2 }} direction="row" useFlexGap flexWrap="wrap">
-              { members.map((member, i) => {
-                return (
-                  <Chip key={i} label={member.slice(0, 8) + '...'} variant="outlined" onDelete={() => handleDeleteMember(member)} />
-                )
-            })}
-            </Stack>
-          </Box>
-        </div>
         {isLoading === true ? 
         <div>
           <p>Loading...</p>
         </div> :
-        <div className="form">
+        <div>
           <div>
             <Box
               component="form"
@@ -109,7 +85,6 @@ const CreateSociety = (props) => {
               helperText="Any (max 32 bit) name for your society (e.g. MySpace)."
             />
             <Box
-              component="form"
               sx={{
                 width: 400,
                 '& .MuiTextField-root': { m: 1, width: '25ch' },
@@ -140,6 +115,26 @@ const CreateSociety = (props) => {
           </div>
         </div>
         }
+        <div className="section-left">
+          <Box
+            component="form"
+            sx={{
+              padding: 5,
+              width: 300,
+              '& .MuiTextField-root': { m: 1, width: '25ch' },
+            }}
+            noValidate
+            autoComplete="off"
+          >
+            <Stack spacing={{ xs: 1, sm: 2 }} direction="row" useFlexGap flexWrap="wrap">
+              { members.map((member, i) => {
+                return (
+                  <Chip key={i} label={member.slice(0, 8) + '...'} variant="outlined" onDelete={() => handleDeleteMember(member)} />
+                )
+            })}
+            </Stack>
+          </Box>
+        </div>
       </div>
     );
 }

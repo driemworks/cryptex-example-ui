@@ -21,7 +21,7 @@ const FileSystem = (props) => {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-      if (props.api !== null && props.acct !== null) {
+      if (props.api !== null && props.addr !== undefined) {
         activeSocietyListener();
       }
     }, [props.api]);
@@ -32,8 +32,7 @@ const FileSystem = (props) => {
     }
 
     const activeSocietyListener = async () => {
-      let ids = await props.api.query.society.membership(
-        props.acct.address, "active");
+      let ids = await props.api.query.society.membership(props.addr, "active");
       setActiveIds(ids);
     }
 
@@ -47,9 +46,10 @@ const FileSystem = (props) => {
         let poly = JSON.parse(localStorage.getItem(localId));
         let secret = calculate_secret(poly.coeffs);
         // TODO: encrypt the secret
+        console.log(props.addr);
         props.api.tx.society.submitReencryptionKey(
             selectedSociety, recipient, hash, secret,
-        ).signAndSend(props.acct, result => {
+        ).signAndSend(props.addr, {signer: props.signer}, result => {
             if (result.isInBlock) {
               setIsLoading(false);
             }
@@ -72,7 +72,7 @@ const FileSystem = (props) => {
     }
 
     return (
-      <div className='fs'>
+      <div className='section fs'>
         <label htmlFor='society-input'>Set society id</label>
         <input 
           id="society-input" 
@@ -93,7 +93,8 @@ const FileSystem = (props) => {
               <TableCell align="right">CID</TableCell>
               { activeIds.indexOf(selectedSociety) > -1 ?
               <TableCell align="right">Reencrypt (address)</TableCell>
-              : <div></div>}
+              : <TableCell align="right"> - </TableCell>
+              }
             </TableRow>
           </TableHead>
           <TableBody>
@@ -115,7 +116,10 @@ const FileSystem = (props) => {
                 </TableCell>
                 <TableCell align="right">
                 { activeIds.indexOf(selectedSociety) > -1 ?
-                  <Reencrypt acct={props.acct} api={props.api} hash={hash} />
+                  <Reencrypt
+                    acct={props.acct} api={props.api} hash={hash}
+                    addr={props.addr} signer={props.signer}
+                  />
                   : <div></div>}
                 </TableCell>
               </TableRow>);

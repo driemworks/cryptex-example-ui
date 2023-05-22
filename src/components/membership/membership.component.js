@@ -30,7 +30,7 @@ const Memberships = (props) => {
     const [committedIds, setCommittedIds] = useState([]);
     const [activeIds, setActiveIds] = useState([]);
     const [foundedIds, setFoundedIds] = useState([]);
-    const [selectSocietyPhase, setSelectSocietyPhase] = useState('');
+    const [selectSocietyPhase, setSelectSocietyPhase] = useState('0');
 
     useEffect(() => { 
       let mounted = true;
@@ -137,7 +137,7 @@ const Memberships = (props) => {
       ciphertext.w,
       r1,
       cid,
-    ).signAndSend(props.acct, ({ status, events }) => {
+    ).signAndSend(props.addr, {signer: props.signer}, {signer: props.signer}, ({ status, events }) => {
       if (status.isInBlock || status.isFinalized) {
         // an event will contain the hash..
         events.forEach(e => {
@@ -163,12 +163,12 @@ const Memberships = (props) => {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleTryForceJoinPhase = async (api, acct, id) => {
+    const handleTryForceJoinPhase = async() => {
       setIsLoading(true);
-      await api.tx.society
-        .tryForceJoinPhase(id)
-        .signAndSend(acct, result => {
-          if (result.isInBlock) {
+      await props.api.tx.society
+        .tryForceJoinPhase(props.id)
+        .signAndSend(props.addr, {signer: props.signer}, result => {
+          if (result.isFinalized) {
             console.log('updated to join phase');
             setIsLoading(false);
             getSocieties();
@@ -176,12 +176,12 @@ const Memberships = (props) => {
         });
     }
   
-    const handleTryForceActivePhase = async (api, acct, id) => {
+    const handleTryForceActivePhase = async () => {
       setIsLoading(true);
-      await api.tx.society
-        .tryForceActivePhase(id)
-        .signAndSend(acct, result => {
-          if (result.isInBlock) {
+      await props.api.tx.society
+        .tryForceActivePhase(props.id)
+        .signAndSend(props.addr, {signer: props.signer}, result => {
+          if (result.isFinalized) {
             console.log('updated to active phase');
             // forceUpdate();
             setIsLoading(false);
@@ -202,7 +202,7 @@ const Memberships = (props) => {
             { props.info.phase[0][1] === 'Commit' ? 
             <div>
               { !isLoading ?
-              <Button onClick={() => handleTryForceJoinPhase(props.api, props.acct, props.id)}>
+              <Button onClick={handleTryForceJoinPhase}>
                 Update to Join Phase
               </Button> :
               <div>
@@ -215,7 +215,7 @@ const Memberships = (props) => {
               { props.pubkeys.length >= props.info.society.threshold ? 
                 <div>
                   { !isLoading ?
-                  <Button onClick={() => handleTryForceActivePhase(props.api, props.acct, props.id)}>
+                  <Button onClick={handleTryForceActivePhase}>
                     Activate Society
                   </Button> :
                   <div>
@@ -275,8 +275,8 @@ const Memberships = (props) => {
       );
       props.api.tx.society.commit(
         id, sharesAndCommitments,
-      ).signAndSend(props.acct, result => {
-        if (result.isInBlock) {
+      ).signAndSend(props.addr, {signer: props.signer}, result => {
+        if (result.isFinalized) {
           setIsLoading(false);
           getSocieties();
         }
@@ -301,6 +301,7 @@ const Memberships = (props) => {
                 </span>
                 <PhaseManager
                   api={props.api} acct={props.acct} 
+                  addr={props.addr} signer={props.signer}
                   id={props.id} shareCount={shareCount} info={invitationInfo}
                   pubkeys={[]}
                 />
@@ -363,8 +364,8 @@ const Memberships = (props) => {
       let pubkey = calculate_pubkey(BigInt(r1), BigInt(r2), secret);
       props.api.tx.society.join(
         id, pubkey.g1, pubkey.g2,
-      ).signAndSend(props.acct, ({ status, events }) => {
-        if (status.isInBlock) {
+      ).signAndSend(props.addr, {signer: props.signer}, ({ status, events }) => {
+        if (status.isFinalized) {
           setIsLoading(false);
           getSocieties();
         }
@@ -388,6 +389,7 @@ const Memberships = (props) => {
             </span>
             <PhaseManager
               api={props.api} acct={props.acct} 
+              addr={props.addr} signer={props.signer}
               id={props.id} shareCount={shareCount} info={info}
               pubkeys={[]}
             />
@@ -461,6 +463,7 @@ const Memberships = (props) => {
             <div>
               <PhaseManager
                 api={props.api} acct={props.acct} 
+                addr={props.addr} signer={props.signer}
                 id={props.id} shareCount={shareCount} info={info}
                 pubkeys={pubkeys}
               />
@@ -520,6 +523,7 @@ const Memberships = (props) => {
             <div>
               <PhaseManager
                 api={props.api} acct={props.acct} 
+                addr={props.addr} signer={props.signer}
                 id={props.id} shareCount={shareCount} info={info}
                 pubkeys={pubkeys}
               />
@@ -541,7 +545,7 @@ const Memberships = (props) => {
         <div>
           <TabContext value={selectSocietyPhase}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <TabList onChange={handleSelectSocietyPhase} aria-label="lab API tabs example">
+            <TabList onChange={handleSelectSocietyPhase} aria-label="Tabs">
               <Tab label={"Invites (" + inviteIds.length + ")"} disabled={inviteIds.length === 0} />
               <Tab label={"Committed (" + committedIds.length + ")"} disabled={committedIds.length === 0} />
               <Tab label={"Active (" + activeIds.length + ")"} disabled={activeIds.length === 0} />
@@ -551,28 +555,28 @@ const Memberships = (props) => {
           <TabPanel value={0}>
             <div>
             { inviteIds.map((invite, idx) => {
-              return (<Invite id={invite} api={props.api} acct={props.acct} />);
+              return (<Invite key={idx} id={invite} api={props.api} acct={props.acct} addr={props.addr} signer={props.signer} />);
             }) }
             </div>
           </TabPanel>
           <TabPanel value={1}>
             <div>
             { committedIds.map((id, idx) => {
-              return (<Committed id={id} api={props.api} acct={props.acct} />);
+              return (<Committed key={idx} id={id} api={props.api} acct={props.acct} addr={props.addr} signer={props.signer} />);
             }) }
             </div>
           </TabPanel>
           <TabPanel value={2}>
             <div>
               { activeIds.map((id, idx) => {
-                return (<Active id={id} api={props.api} acct={props.acct} />);
+                return (<Active key={idx} id={id} api={props.api} acct={props.acct} addr={props.addr} signer={props.signer} />);
               })}
             </div>
           </TabPanel>
           <TabPanel value={3}>
             <div>
               { foundedIds.map((id, idx) => {
-                return (<Founded id={id} api={props.api} acct={props.acct} />);
+                return (<Founded key={idx} id={id} api={props.api} acct={props.acct} addr={props.addr} signer={props.signer} />);
               })}
             </div>
           </TabPanel>

@@ -3,20 +3,29 @@
 }
 
 .header {
-  display: flex;
+  display: block ruby;
   background: rgb(202, 200, 200);
 }
 
 .header-details {
   display: grid;
+  float: right;
 }
 
 .title {
-  margin: 0 auto;
+  /* margin: 0 auto; */
+  /* float: left; */
+}
+
+.title:hover {
+  cursor: pointer;
 }
 
 .body {
   font-family: 'Courier New', Courier, monospace;
+  min-height: 90vh;
+  display: flex;
+  flex-direction: column;
   /* display: inline-grid; */
 }
 
@@ -24,10 +33,18 @@
   display: flex;
 }
 
+.config-container {
+  display: grid;
+  width: 0px;
+  margin: 0 auto;
+  padding: 10px;
+}
+
 .section {
-  display: contents;
+  /* display: contents; */
   /* display: inline-grid; */
-  /* margin: 0 auto; */
+  margin: 0 auto;
+  padding: 30px;
   /* padding-top: 5vh; */
   /* margin-left: 30vw; */
 
@@ -37,10 +54,43 @@
   padding: 20px;
 }
 
-.form {
-  /* margin: 0 auto;  */
-}
-
 .hoverable:hover {
   color: blue;
+}
+
+.home {
+  text-align: left;
+}
+
+.instructions {
+  width: 50%;
+  margin: 0 auto;
+  display: grid;
+}
+
+.instructions > span {
+  padding: 10px;
+}
+
+.footer {
+  /* position: fixed; */
+  background: rgb(191, 190, 190);
+  width: 100%;
+  text-align: right;
+  align-items: center;
+  /* margin-top: auto; */
+}
+
+.footer > a {
+  align-items: center;
+  padding: 10px;
+  color: black;
+}
+
+.footer > a:hover {
+  color: blue;
+}
+
+.discord {
+  font-size: 20px;
 }

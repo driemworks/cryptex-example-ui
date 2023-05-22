@@ -101,7 +101,7 @@ const SharedData = (props) => {
   }
 
   return (
-    <div className='section'>
+    <div className="section">
       { sharedKeys.length === 0 ? <div></div> :
         <TableContainer component={Paper}>
          <Table sx={{ minWidth: 500 }} aria-label="simple table">
@@ -132,7 +132,9 @@ const SharedData = (props) => {
               <TableCell>{k[0].threshold}</TableCell>
               <TableCell>
                 <Decrypt
-                  api={props.api} hash={hash} k={k} ipfs={props.ipfs} rks={rks} cid={k[0].cid} u={k[0].u}
+                  api={props.api} hash={hash} k={k} 
+                  ipfs={props.ipfs} rks={rks} 
+                  cid={k[0].cid} u={k[0].u}
                 />
               </TableCell>
             </TableRow>);
