@@ -4,6 +4,7 @@
 
 .header {
   display: block ruby;
+  /* flex-direction: column; */
   background: rgb(202, 200, 200);
 }
 
@@ -93,4 +94,11 @@
 
 .discord {
   font-size: 20px;
+}
+
+.ipfs-config {
+  float: left;
+  /* margin: 0 auto; */
+  margin: 25px;
+  position: absolute;
 }
